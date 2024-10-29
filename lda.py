@@ -42,47 +42,86 @@ def get_all_labels(y):
 
 class LDAClassifier:
     def __init__(self, covariance_type: Literal['general', 'independent', 'isotropic'] = 'general'):
+        # Initialize dictionaries to store class-specific means and priors
         self.means = {}
         self.priors = {}
-        self.shared_covariance = None  # Single covariance matrix shared across all classes
+        
+        # Placeholder for the covariance matrix (shared across all classes)
+        self.shared_covariance = None
+        
+        # Type of covariance to use: 'general' (full covariance), 
+        # 'independent' (diagonal), or 'isotropic' (scaled identity matrix)
         self.covariance_type = covariance_type
     
     def fit(self, X, y):
+        # Find unique classes in the target vector y
         classes = np.unique(y)
+        
+        # Number of features (dimensions) in the dataset
         n_features = X.shape[1]
+        
+        # Total number of samples in the dataset
         n_samples = X.shape[0]
+        
+        # Initialize the shared covariance matrix as zeros
         self.shared_covariance = np.zeros((n_features, n_features))
         
+        # Iterate over each class to compute class-specific means and priors
         for cls in classes:
+            # Subset of data belonging to the current class
             X_cls = X[y == cls]
+            
+            # Calculate the mean vector for the current class
             self.means[cls] = np.mean(X_cls, axis=0)
+            
+            # Calculate the prior probability for the current class
             self.priors[cls] = X_cls.shape[0] / n_samples
-            # Accumulate covariance
+            
+            # Calculate the difference between class samples and their mean
             diff = X_cls - self.means[cls]
+            
+            # Accumulate the covariance contributions for this class
             self.shared_covariance += diff.T @ diff
         
+        # Average the covariance matrix over all classes
         self.shared_covariance /= n_samples - len(classes)
         
+        # Adjust the covariance matrix according to the specified covariance type
         if self.covariance_type == 'independent':
-            # Zero off-diagonal elements (diagonal covariance matrix)
+            # Set off-diagonal elements to zero (diagonal matrix)
             self.shared_covariance = np.diag(np.diag(self.shared_covariance))
         elif self.covariance_type == 'isotropic':
-            # Replace covariance with scalar times identity matrix
+            # Replace covariance matrix with a scaled identity matrix
             avg_variance = np.trace(self.shared_covariance) / n_features
             self.shared_covariance = np.identity(n_features) * avg_variance
     
     def predict(self, X):
+        # List to store the predicted classes for each sample
         predictions = []
+        
+        # Calculate the inverse of the shared covariance matrix for scoring
         inv_cov = np.linalg.inv(self.shared_covariance)
+        
+        # Iterate over each sample to compute its class score
         for x in X:
+            # Dictionary to store the discriminant score for each class
             scores = {}
+            
+            # Calculate the discriminant score for each class
             for cls in self.means:
                 mean = self.means[cls]
                 prior = self.priors[cls]
+                
+                # Discriminant function (linear score) for Gaussian distributions
                 score = x.T @ inv_cov @ mean - 0.5 * mean.T @ inv_cov @ mean + np.log(prior)
                 scores[cls] = score
+            
+            # Select the class with the highest score as the predicted class
             predictions.append(max(scores, key=scores.get))
+        
+        # Return predictions as a numpy array for compatibility with other libraries
         return np.array(predictions)
+
 
 def plot_lda_decision_boundary(classifier, X, y, title, ax):
     # Define the feature region

@@ -55,42 +55,73 @@ def get_all_labels(y):
 
 class QDAClassifier:
     def __init__(self, covariance_type: Literal['general', 'independent', 'isotropic'] = 'general'):
+        # Initialize dictionaries to store class-specific means, covariances, and priors
         self.means = {}
         self.covariances = {}
         self.priors = {}
+        
+        # Type of covariance to use: 'general' (full covariance), 
+        # 'independent' (diagonal), or 'isotropic' (scaled identity matrix)
         self.covariance_type = covariance_type
     
     def fit(self, X, y):
+        # Find unique classes in the target vector y
         classes = np.unique(y)
+        
+        # Iterate over each class to compute class-specific parameters
         for cls in classes:
+            # Subset of data belonging to the current class
             X_cls = X[y == cls]
+            
+            # Calculate the mean vector for the current class
             self.means[cls] = np.mean(X_cls, axis=0)
+            
+            # Calculate the prior probability for the current class
             self.priors[cls] = X_cls.shape[0] / X.shape[0]
             
+            # Compute the covariance matrix for the current class
             if self.covariance_type == 'general':
-                # No constraint on covariance; full covariance matrix
+                # Full covariance matrix (no constraint on covariance structure)
                 self.covariances[cls] = np.cov(X_cls, rowvar=False)
             elif self.covariance_type == 'independent':
-                # Diagonal covariance matrix (features are uncorrelated)
+                # Diagonal covariance matrix (only variances on the diagonal, features uncorrelated)
                 self.covariances[cls] = np.diag(np.var(X_cls, axis=0))
             elif self.covariance_type == 'isotropic':
-                # Scalar times identity matrix (same variance for all features)
+                # Scaled identity matrix (equal variance for all features)
                 self.covariances[cls] = np.identity(X.shape[1]) * np.mean(np.var(X_cls, axis=0))
     
     def _compute_likelihood(self, x, mean, cov):
+        # Helper function to calculate the log-likelihood of sample x given a class
+        # Number of dimensions
         size = len(mean)
+        
+        # Determinant and inverse of the covariance matrix
         det_cov = np.linalg.det(cov)
         inv_cov = np.linalg.inv(cov)
+        
+        # Difference between sample x and the class mean
         diff = x - mean
+        
+        # Calculate the log-likelihood (Gaussian density in log form)
         return -0.5 * (np.log(det_cov) + diff.T @ inv_cov @ diff + size * np.log(2 * np.pi))
     
     def predict(self, X):
+        # List to store the predicted classes for each sample
         predictions = []
+        
+        # Iterate over each sample to compute its likelihood for each class
         for x in X:
+            # Dictionary to store the log-likelihood for each class
             likelihoods = {}
+            
+            # Calculate the likelihood for each class
             for cls in self.means:
                 likelihoods[cls] = np.log(self.priors[cls]) + self._compute_likelihood(x, self.means[cls], self.covariances[cls])
+            
+            # Select the class with the highest likelihood as the predicted class
             predictions.append(max(likelihoods, key=likelihoods.get))
+        
+        # Return predictions as a numpy array for compatibility with other libraries
         return np.array(predictions)
 
 
